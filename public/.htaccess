@@ -1,0 +1,7 @@
+Options -Indexes
+
+# Deny direct access to API endpoints from browsers without an API key
+# (they'll get a 401 JSON response anyway, but this adds a layer)
+<FilesMatch "^(config|src|sql|shared-auth)">
+    Deny from all
+</FilesMatch>

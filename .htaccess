@@ -1,0 +1,20 @@
+# Route all requests through the public/ directory
+# This handles the Hostinger deployment where public_html/ is the web root
+
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # If request is already for something inside public/, leave it alone
+    RewriteCond %{REQUEST_URI} ^/public/ [NC]
+    RewriteRule ^ - [L]
+
+    # Redirect bare root to public/index.php
+    RewriteRule ^$ /public/index.php [R=301,L]
+
+    # Route everything else through public/
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(.*)$ /public/$1 [L]
+</IfModule>
