@@ -1,0 +1,7 @@
+.env
+vendor/
+scripts/create-superadmin.php
+scripts/seed-defaults.php
+uploads/
+*.log
+.DS_Store
