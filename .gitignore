@@ -1,9 +1,7 @@
 .env
 vendor/
-scripts/create-superadmin.php
-scripts/seed-defaults.php
-# Remove setup.php from git after first deployment
-# public/setup.php
+scripts/
+public/setup.php
 uploads/
 *.log
 .DS_Store
