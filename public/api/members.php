@@ -81,6 +81,20 @@ if ($method === 'GET') {
         ApiAuth::json(['data' => $members, 'total' => count($members)]);
     }
 
+    // ── All memberships for an org (e.g. to build grouped staff list) ────
+    if (isset($_GET['all'], $_GET['member_type'])) {
+        if (!$organisationId) {
+            ApiAuth::json(['error' => 'organisation_id is required'], 400);
+        }
+        $memberType = $_GET['member_type'];
+        $allowed    = ['staff', 'person', 'user'];
+        if (!in_array($memberType, $allowed, true)) {
+            ApiAuth::json(['error' => 'member_type must be staff, person, or user'], 400);
+        }
+        $memberships = TeamMember::getAllForOrg($organisationId, $memberType);
+        ApiAuth::json(['data' => $memberships, 'total' => count($memberships)]);
+    }
+
     // ── Teams for a specific member ───────────────────────────────────────
     if (isset($_GET['member_type'], $_GET['external_id'])) {
         if (!$organisationId) {

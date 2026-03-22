@@ -248,6 +248,36 @@ class TeamMember
     // ── History ───────────────────────────────────────────────────────────────
 
     /**
+     * Get all active memberships for an organisation, optionally filtered by type.
+     * Returns each membership with team name — used by PMS to build the grouped staff list.
+     */
+    public static function getAllForOrg(int $organisationId, string $memberType = 'staff'): array
+    {
+        $db   = getDbConnection();
+        $stmt = $db->prepare('
+            SELECT tm.external_id,
+                   tm.display_name,
+                   tm.display_ref,
+                   tm.is_primary_team,
+                   tm.joined_at,
+                   tm.team_role_id,
+                   t.id    AS team_id,
+                   t.name  AS team_name,
+                   tr.name AS role_name
+            FROM   team_members tm
+            JOIN   teams t ON tm.team_id = t.id
+            LEFT JOIN team_roles tr ON tm.team_role_id = tr.id
+            WHERE  tm.organisation_id = ?
+              AND  tm.member_type     = ?
+              AND  tm.left_at         IS NULL
+              AND  t.is_active        = TRUE
+            ORDER BY t.name ASC, tm.display_name ASC
+        ');
+        $stmt->execute([$organisationId, $memberType]);
+        return $stmt->fetchAll();
+    }
+
+    /**
      * Get full membership history (including former members) for a team.
      */
     public static function getHistoryForTeam(int $teamId): array
