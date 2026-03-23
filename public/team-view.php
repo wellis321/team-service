@@ -68,6 +68,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAdmin) {
 // ── Load data ─────────────────────────────────────────────────────────────
 $team       = Team::findById($teamId);
 $breadcrumb = Team::getAncestorPath($teamId);
+
+// Fetch member lists from connected services for the search UI
+$staffList  = StaffServiceClient::fetchAll();
+$peopleList = PeopleServiceClient::fetchAll();
+$staffJson  = json_encode($staffList,  JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
+$peopleJson = json_encode($peopleList, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
 $staff      = TeamMember::getForTeam($teamId, 'staff');
 $people     = TeamMember::getForTeam($teamId, 'person');
 $roles      = TeamRole::findByOrganisation($organisationId);
@@ -280,7 +286,7 @@ include INCLUDES_PATH . '/header.php';
 
             <div class="form-group">
                 <label>Member Type *</label>
-                <select name="member_type" class="form-control" id="memberTypeSelect" onchange="updateRoleOptions()">
+                <select name="member_type" class="form-control" id="memberTypeSelect" onchange="updateMemberUI()">
                     <option value="staff">Staff member (from Staff Service)</option>
                     <?php if (!$isStaffOnly): ?>
                     <option value="person">Person supported (from People Service)</option>
@@ -289,22 +295,41 @@ include INCLUDES_PATH . '/header.php';
                 </select>
             </div>
 
-            <div class="form-group">
+            <!-- Hidden fields populated by search selection -->
+            <input type="hidden" name="external_id" id="modalExternalId">
+            <input type="hidden" name="display_name" id="modalDisplayName">
+            <input type="hidden" name="display_ref"  id="modalDisplayRef">
+
+            <!-- Search UI (shown when service is connected) -->
+            <div class="form-group" id="memberSearchGroup">
+                <label>Search <span id="memberTypeLabel">Member</span> *</label>
+                <input type="text" id="memberSearchInput" class="form-control"
+                       placeholder="Type a name to search…" autocomplete="off">
+                <div id="memberSearchResults" class="member-search-results"></div>
+                <div id="memberSelected" class="member-selected" style="display:none">
+                    <i class="fa-solid fa-circle-check" style="color:var(--success)"></i>
+                    <span id="memberSelectedName"></span>
+                    <button type="button" onclick="clearMemberSelection()" class="btn-clear-selection">
+                        <i class="fa-solid fa-times"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Manual fallback (shown when service not configured) -->
+            <div class="form-group" id="manualIdGroup" style="display:none">
                 <label>External ID * <small class="text-light">(their ID in the source service)</small></label>
-                <input type="number" name="external_id" class="form-control" required min="1"
-                       placeholder="e.g. 42">
+                <input type="number" id="manualExternalId" class="form-control" min="1" placeholder="e.g. 42"
+                       oninput="document.getElementById('modalExternalId').value=this.value">
             </div>
-
-            <div class="form-group">
+            <div class="form-group" id="manualNameGroup" style="display:none">
                 <label>Display Name * <small class="text-light">(full name for display)</small></label>
-                <input type="text" name="display_name" class="form-control" required
-                       placeholder="e.g. Jane Smith">
+                <input type="text" id="manualDisplayName" class="form-control" placeholder="e.g. Jane Smith"
+                       oninput="document.getElementById('modalDisplayName').value=this.value">
             </div>
-
-            <div class="form-group">
+            <div class="form-group" id="manualRefGroup" style="display:none">
                 <label>Reference <small class="text-light">(employee ref, CHI number, etc.)</small></label>
-                <input type="text" name="display_ref" class="form-control"
-                       placeholder="Optional">
+                <input type="text" id="manualDisplayRef" class="form-control" placeholder="Optional"
+                       oninput="document.getElementById('modalDisplayRef').value=this.value">
             </div>
 
             <div class="form-group">
@@ -375,28 +400,144 @@ include INCLUDES_PATH . '/header.php';
 }
 .modal-close:hover { color: var(--text); }
 .modal-box form { padding: 1.5rem; }
+.member-search-results {
+    border: 1px solid var(--border); border-top: none; border-radius: 0 0 0.375rem 0.375rem;
+    max-height: 200px; overflow-y: auto; background: #fff;
+    display: none;
+}
+.member-search-results.open { display: block; }
+.member-result-item {
+    padding: 0.5rem 0.75rem; cursor: pointer; font-size: 0.875rem;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+}
+.member-result-item:last-child { border-bottom: none; }
+.member-result-item:hover { background: var(--bg); }
+.member-result-ref { font-size: 0.75rem; color: var(--text-light); }
+.member-result-empty { padding: 0.75rem; font-size: 0.875rem; color: var(--text-light); text-align: center; }
+.member-selected {
+    margin-top: 0.5rem; padding: 0.5rem 0.75rem;
+    background: #d1fae5; border: 1px solid #a7f3d0; border-radius: 0.375rem;
+    display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;
+}
+.member-selected span { flex: 1; font-weight: 500; }
+.btn-clear-selection {
+    background: none; border: none; cursor: pointer; color: var(--text-light);
+    padding: 0.125rem; line-height: 1;
+}
+.btn-clear-selection:hover { color: var(--danger); }
 </style>
 
 <script>
-function updateRoleOptions() {
-    const type   = document.getElementById('memberTypeSelect').value;
-    const select = document.getElementById('roleSelect');
-    const primary = document.getElementById('primaryTeamGroup');
+const staffData  = <?php echo $staffJson; ?>;
+const peopleData = <?php echo $peopleJson; ?>;
+const hasStaff   = staffData.length > 0;
+const hasPeople  = peopleData.length > 0;
 
-    // Show/hide primary team checkbox (only relevant for staff)
+function updateMemberUI() {
+    const type    = document.getElementById('memberTypeSelect').value;
+    const select  = document.getElementById('roleSelect');
+    const primary = document.getElementById('primaryTeamGroup');
+    const label   = document.getElementById('memberTypeLabel');
+    const searchGroup = document.getElementById('memberSearchGroup');
+    const manualId    = document.getElementById('manualIdGroup');
+    const manualName  = document.getElementById('manualNameGroup');
+    const manualRef   = document.getElementById('manualRefGroup');
+
+    // Primary team only for staff
     primary.style.display = type === 'staff' ? '' : 'none';
 
-    // Filter role options by applies_to
+    // Filter role options
     Array.from(select.options).forEach(opt => {
-        if (!opt.value) return; // keep the blank option
+        if (!opt.value) return;
         const applies = opt.dataset.applies;
         opt.hidden = !(applies === 'both' || applies === type);
     });
-    // Reset if current selection is now hidden
     if (select.selectedOptions[0]?.hidden) select.value = '';
+
+    // Show search or manual inputs
+    const useSearch = (type === 'staff' && hasStaff) || (type === 'person' && hasPeople) || (type === 'user');
+    searchGroup.style.display = (useSearch && type !== 'user') ? '' : 'none';
+    manualId.style.display    = (!useSearch || type === 'user') ? '' : 'none';
+    manualName.style.display  = (!useSearch || type === 'user') ? '' : 'none';
+    manualRef.style.display   = (!useSearch || type === 'user') ? '' : 'none';
+
+    label.textContent = type === 'staff' ? 'Staff Member' : type === 'person' ? 'Person Supported' : 'Member';
+
+    clearMemberSelection();
+    document.getElementById('memberSearchInput').value = '';
+    document.getElementById('memberSearchResults').classList.remove('open');
+    document.getElementById('memberSearchResults').innerHTML = '';
 }
+
+function getList() {
+    const type = document.getElementById('memberTypeSelect').value;
+    return type === 'staff' ? staffData : type === 'person' ? peopleData : [];
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    const input   = document.getElementById('memberSearchInput');
+    const results = document.getElementById('memberSearchResults');
+
+    input.addEventListener('input', function () {
+        const q    = this.value.trim().toLowerCase();
+        const list = getList();
+        results.innerHTML = '';
+
+        if (!q) { results.classList.remove('open'); return; }
+
+        const matches = list.filter(m =>
+            m.name.toLowerCase().includes(q) ||
+            (m.ref && m.ref.toLowerCase().includes(q))
+        ).slice(0, 10);
+
+        if (!matches.length) {
+            results.innerHTML = '<div class="member-result-empty">No results found</div>';
+        } else {
+            matches.forEach(m => {
+                const div = document.createElement('div');
+                div.className = 'member-result-item';
+                div.innerHTML = `<span>${escHtml(m.name)}</span>${m.ref ? `<span class="member-result-ref">${escHtml(m.ref)}</span>` : ''}`;
+                div.addEventListener('click', () => selectMember(m));
+                results.appendChild(div);
+            });
+        }
+        results.classList.add('open');
+    });
+
+    // Close results when clicking outside
+    document.addEventListener('click', function (e) {
+        if (!e.target.closest('#memberSearchGroup')) {
+            results.classList.remove('open');
+        }
+    });
+});
+
+function selectMember(m) {
+    document.getElementById('modalExternalId').value  = m.id;
+    document.getElementById('modalDisplayName').value = m.name;
+    document.getElementById('modalDisplayRef').value  = m.ref || '';
+    document.getElementById('memberSelectedName').textContent = m.name + (m.ref ? ' — ' + m.ref : '');
+    document.getElementById('memberSelected').style.display  = 'flex';
+    document.getElementById('memberSearchInput').value = '';
+    document.getElementById('memberSearchResults').classList.remove('open');
+    document.getElementById('memberSearchResults').innerHTML = '';
+}
+
+function clearMemberSelection() {
+    document.getElementById('modalExternalId').value  = '';
+    document.getElementById('modalDisplayName').value = '';
+    document.getElementById('modalDisplayRef').value  = '';
+    document.getElementById('memberSelected').style.display = 'none';
+    document.getElementById('memberSelectedName').textContent = '';
+}
+
+function escHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 // Run on load
-updateRoleOptions();
+updateMemberUI();
 </script>
 <?php endif; ?>
 
