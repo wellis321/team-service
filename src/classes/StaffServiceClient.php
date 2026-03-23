@@ -58,6 +58,26 @@ class StaffServiceClient
     }
 
     /**
+     * Look up the remote org ID for a given domain (used by settings page on save).
+     */
+    public static function orgLookup(string $url, string $apiKey, string $domain): ?int
+    {
+        $url = rtrim($url, '/') . '/api/org-lookup.php?domain=' . urlencode($domain);
+        $ctx = stream_context_create([
+            'http' => [
+                'method'        => 'GET',
+                'header'        => 'Authorization: Bearer ' . $apiKey . "\r\nAccept: application/json\r\n",
+                'timeout'       => 5,
+                'ignore_errors' => true,
+            ],
+        ]);
+        $body = @file_get_contents($url, false, $ctx);
+        if ($body === false) return null;
+        $data = json_decode($body, true);
+        return isset($data['org_id']) ? (int) $data['org_id'] : null;
+    }
+
+    /**
      * Test a connection with explicit URL + key (used by settings page).
      */
     public static function testConnection(string $url, string $apiKey): bool

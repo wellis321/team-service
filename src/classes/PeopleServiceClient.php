@@ -27,14 +27,37 @@ class PeopleServiceClient
     }
 
     /**
+     * Look up the remote org ID for a given domain (called on integration save).
+     */
+    public static function orgLookup(string $url, string $apiKey, string $domain): ?int
+    {
+        $url = rtrim($url, '/') . '/api/org-lookup.php?domain=' . urlencode($domain);
+        $ctx = stream_context_create([
+            'http' => [
+                'method'        => 'GET',
+                'header'        => 'Authorization: Bearer ' . $apiKey . "\r\nAccept: application/json\r\n",
+                'timeout'       => 5,
+                'ignore_errors' => true,
+            ],
+        ]);
+        $body = @file_get_contents($url, false, $ctx);
+        if ($body === false) return null;
+        $data = json_decode($body, true);
+        return isset($data['org_id']) ? (int) $data['org_id'] : null;
+    }
+
+    /**
      * Fetch all active people. Returns [['id', 'name', 'ref'], ...] or [].
-     * organisation_id is passed as a query param for app-scoped keys.
+     * Uses the resolved remote org ID stored in OrgSettings.
      */
     public static function fetchAll(int $orgId): array
     {
         if (!self::enabled($orgId)) return [];
 
-        $url = self::baseUrl($orgId) . '/api/people-data.php?status=active&organisation_id=' . $orgId;
+        // Use the resolved remote org ID; fall back to local org ID if not yet resolved
+        $remoteOrgId = (int) OrgSettings::get($orgId, 'people_service_org_id', (string) $orgId);
+        $url = self::baseUrl($orgId) . '/api/people-data.php?status=active&organisation_id=' . $remoteOrgId;
+
         $ctx = stream_context_create([
             'http' => [
                 'method'        => 'GET',
@@ -72,7 +95,6 @@ class PeopleServiceClient
                 'ignore_errors' => true,
             ],
         ]);
-        // Any JSON response (even org-required error) means the service is reachable and key is valid
         $body = @file_get_contents($url, false, $ctx);
         return $body !== false && json_decode($body) !== null;
     }

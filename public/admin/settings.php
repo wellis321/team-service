@@ -136,6 +136,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'staff_service_url'     => $url,
                 'staff_service_api_key' => $apiKey,
             ]);
+            // Auto-resolve remote org ID by domain
+            if ($url && $apiKey) {
+                $orgRow = $db->prepare('SELECT domain FROM organisations WHERE id = ? LIMIT 1');
+                $orgRow->execute([$organisationId]);
+                $domain = $orgRow->fetchColumn();
+                if ($domain) {
+                    $remoteId = StaffServiceClient::orgLookup($url, $apiKey, $domain);
+                    if ($remoteId) OrgSettings::set($organisationId, 'staff_service_org_id', (string) $remoteId);
+                }
+            }
             $success = 'Staff Service settings saved.';
         }
 
@@ -163,6 +173,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'people_service_url'     => $url,
                 'people_service_api_key' => $apiKey,
             ]);
+            // Auto-resolve remote org ID by domain
+            if ($url && $apiKey) {
+                $orgRow = $db->prepare('SELECT domain FROM organisations WHERE id = ? LIMIT 1');
+                $orgRow->execute([$organisationId]);
+                $domain = $orgRow->fetchColumn();
+                if ($domain) {
+                    $remoteId = PeopleServiceClient::orgLookup($url, $apiKey, $domain);
+                    if ($remoteId) OrgSettings::set($organisationId, 'people_service_org_id', (string) $remoteId);
+                }
+            }
             $success = 'People Service settings saved.';
         }
 
