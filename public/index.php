@@ -4,7 +4,10 @@
  */
 require_once dirname(__DIR__) . '/config/config.php';
 
-Auth::requireLogin();
+if (!Auth::isLoggedIn()) {
+    header('Location: ' . url('landing.php'));
+    exit;
+}
 
 $organisationId = Auth::getOrganisationId();
 $db             = getDbConnection();
