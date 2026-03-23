@@ -130,7 +130,7 @@ include INCLUDES_PATH . '/public_header.php';
             </div>
             <div class="service-card-footer">
                 <?php if (STAFF_SERVICE_URL): ?>
-                <a href="<?php echo htmlspecialchars(STAFF_SERVICE_URL); ?>/landing.php" class="btn-visit staff" target="_blank" rel="noopener">
+                <a href="<?php echo htmlspecialchars(STAFF_SERVICE_URL); ?>/landing.php" class="btn-visit staff" target="_blank" rel="noopener noreferrer">
                     <i class="fas fa-arrow-right"></i> Visit Staff Service
                 </a>
                 <?php else: ?>
@@ -187,7 +187,7 @@ include INCLUDES_PATH . '/public_header.php';
             </div>
             <div class="service-card-footer">
                 <?php if (PEOPLE_SERVICE_URL): ?>
-                <a href="<?php echo htmlspecialchars(PEOPLE_SERVICE_URL); ?>/landing.php" class="btn-visit people" target="_blank" rel="noopener">
+                <a href="<?php echo htmlspecialchars(PEOPLE_SERVICE_URL); ?>/landing.php" class="btn-visit people" target="_blank" rel="noopener noreferrer">
                     <i class="fas fa-arrow-right"></i> Visit People Service
                 </a>
                 <?php else: ?>
