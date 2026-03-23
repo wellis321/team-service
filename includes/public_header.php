@@ -22,6 +22,8 @@
             <ul class="nav-links">
                 <li><a href="<?php echo url('landing.php'); ?>" <?php echo basename($_SERVER['PHP_SELF']) === 'landing.php' ? 'class="active"' : ''; ?>>
                     <i class="fas fa-home"></i> Home</a></li>
+                <li><a href="<?php echo url('services.php'); ?>" <?php echo basename($_SERVER['PHP_SELF']) === 'services.php' ? 'class="active"' : ''; ?>>
+                    <i class="fas fa-cubes"></i> Our Platform</a></li>
                 <li><a href="<?php echo url('contact.php'); ?>" <?php echo basename($_SERVER['PHP_SELF']) === 'contact.php' ? 'class="active"' : ''; ?>>
                     <i class="fas fa-envelope"></i> Contact</a></li>
                 <?php if (Auth::isLoggedIn()): ?>
