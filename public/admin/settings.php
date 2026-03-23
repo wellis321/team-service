@@ -126,6 +126,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        // ── Staff Service integration ─────────────────────────────────────
+        if ($action === 'save_staff_service') {
+            $url    = trim($_POST['staff_service_url']     ?? '');
+            $apiKey = trim($_POST['staff_service_api_key'] ?? '');
+            $existing = OrgSettings::get($organisationId, 'staff_service_api_key');
+            if ($apiKey === '' && $existing !== '') $apiKey = $existing;
+            OrgSettings::setMany($organisationId, [
+                'staff_service_url'     => $url,
+                'staff_service_api_key' => $apiKey,
+            ]);
+            $success = 'Staff Service settings saved.';
+        }
+
+        if ($action === 'test_staff_service') {
+            $url    = trim($_POST['staff_service_url']     ?? '');
+            $apiKey = trim($_POST['staff_service_api_key'] ?? '');
+            $testTarget = 'staff';
+            $testResult = ($url && $apiKey)
+                ? (StaffServiceClient::testConnection($url, $apiKey) ? 'success' : 'fail')
+                : 'missing';
+        }
+
+        if ($action === 'clear_staff_service') {
+            OrgSettings::setMany($organisationId, ['staff_service_url' => '', 'staff_service_api_key' => '']);
+            $success = 'Staff Service disconnected.';
+        }
+
+        // ── People Service integration ────────────────────────────────────
+        if ($action === 'save_people_service') {
+            $url    = trim($_POST['people_service_url']     ?? '');
+            $apiKey = trim($_POST['people_service_api_key'] ?? '');
+            $existing = OrgSettings::get($organisationId, 'people_service_api_key');
+            if ($apiKey === '' && $existing !== '') $apiKey = $existing;
+            OrgSettings::setMany($organisationId, [
+                'people_service_url'     => $url,
+                'people_service_api_key' => $apiKey,
+            ]);
+            $success = 'People Service settings saved.';
+        }
+
+        if ($action === 'test_people_service') {
+            $url    = trim($_POST['people_service_url']     ?? '');
+            $apiKey = trim($_POST['people_service_api_key'] ?? '');
+            $testTarget = 'people';
+            $testResult = ($url && $apiKey)
+                ? (PeopleServiceClient::testConnection($url, $apiKey) ? 'success' : 'fail')
+                : 'missing';
+        }
+
+        if ($action === 'clear_people_service') {
+            OrgSettings::setMany($organisationId, ['people_service_url' => '', 'people_service_api_key' => '']);
+            $success = 'People Service disconnected.';
+        }
+
         // ── API keys ──────────────────────────────────────────────────────
         if ($action === 'create_api_key') {
             $name    = trim($_POST['api_key_name']    ?? '');
@@ -160,6 +214,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $teamTypes = TeamType::findByOrganisation($organisationId);
 $teamRoles = TeamRole::findByOrganisation($organisationId);
 
+$testResult = null;
+$testTarget = '';
+
+$staffUrl    = OrgSettings::get($organisationId, 'staff_service_url',      STAFF_SERVICE_URL);
+$staffKeySet = OrgSettings::get($organisationId, 'staff_service_api_key',  STAFF_SERVICE_API_KEY) !== '';
+$peopleUrl    = OrgSettings::get($organisationId, 'people_service_url',    PEOPLE_SERVICE_URL);
+$peopleKeySet = OrgSettings::get($organisationId, 'people_service_api_key', PEOPLE_SERVICE_API_KEY) !== '';
+
 $stmt = $db->prepare('
     SELECT id, name, connected_service, is_active, last_used_at, created_at
     FROM   api_keys
@@ -186,6 +248,127 @@ include INCLUDES_PATH . '/header.php';
 <?php if ($success): ?>
     <div class="alert alert-success"><i class="fa-solid fa-circle-check"></i> <?php echo $success; ?></div>
 <?php endif; ?>
+<?php if ($testResult === 'success'): ?>
+    <div class="alert alert-success"><i class="fa-solid fa-check-circle"></i>
+        Connection successful — <?php echo $testTarget === 'staff' ? 'Staff Service' : 'People Service'; ?> is reachable.</div>
+<?php elseif ($testResult === 'fail'): ?>
+    <div class="alert alert-error"><i class="fa-solid fa-times-circle"></i> Connection failed — check the URL and API key.</div>
+<?php elseif ($testResult === 'missing'): ?>
+    <div class="alert alert-warning"><i class="fa-solid fa-exclamation-triangle"></i> Please enter both a URL and API key to test.</div>
+<?php endif; ?>
+
+<!-- ── Staff Service Integration ──────────────────────────────────────────── -->
+<div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem;">
+        <div>
+            <h2 style="font-size:1.1rem; font-weight:600;"><i class="fa-solid fa-users" style="color:var(--primary)"></i> Staff Service Integration</h2>
+            <p class="text-light text-small" style="margin-top:.25rem">Connect to the Staff Service so members can be searched and added to teams by name.</p>
+        </div>
+        <?php if ($staffUrl && $staffKeySet): ?>
+            <span class="badge badge-green">Connected</span>
+        <?php else: ?>
+            <span class="badge badge-grey">Not configured</span>
+        <?php endif; ?>
+    </div>
+    <form method="POST">
+        <?php echo CSRF::tokenField(); ?>
+        <input type="hidden" name="action" value="save_staff_service">
+        <div class="form-group">
+            <label>Staff Service URL</label>
+            <input type="url" name="staff_service_url" class="form-control" id="staff_service_url"
+                   placeholder="https://your-staff-service.hostingersite.com/public"
+                   value="<?php echo htmlspecialchars($staffUrl); ?>">
+        </div>
+        <div class="form-group">
+            <label>API Key</label>
+            <input type="password" name="staff_service_api_key" class="form-control" id="staff_service_api_key"
+                   placeholder="<?php echo $staffKeySet ? '(saved — leave blank to keep)' : 'Paste key from Staff Service → Admin → Settings → API Keys'; ?>">
+            <?php if ($staffKeySet): ?><div class="form-hint">Leave blank to keep the existing key.</div><?php endif; ?>
+        </div>
+        <div style="display:flex; gap:.75rem; flex-wrap:wrap;">
+            <button type="submit" class="btn btn-primary"><i class="fa-solid fa-save"></i> Save</button>
+            <button type="submit" form="test-staff-form" class="btn btn-secondary"><i class="fa-solid fa-plug"></i> Test</button>
+            <?php if ($staffUrl || $staffKeySet): ?>
+            <button type="submit" form="clear-staff-form" class="btn btn-danger"
+                    onclick="return confirm('Disconnect the Staff Service?')">
+                <i class="fa-solid fa-unlink"></i> Disconnect
+            </button>
+            <?php endif; ?>
+        </div>
+    </form>
+    <form id="test-staff-form" method="POST" style="display:none">
+        <?php echo CSRF::tokenField(); ?>
+        <input type="hidden" name="action" value="test_staff_service">
+        <input type="hidden" name="staff_service_url" id="test_staff_url" value="<?php echo htmlspecialchars($staffUrl); ?>">
+        <input type="hidden" name="staff_service_api_key" id="test_staff_key" value="">
+    </form>
+    <form id="clear-staff-form" method="POST" style="display:none">
+        <?php echo CSRF::tokenField(); ?>
+        <input type="hidden" name="action" value="clear_staff_service">
+    </form>
+</div>
+
+<!-- ── People Service Integration ─────────────────────────────────────────── -->
+<div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem;">
+        <div>
+            <h2 style="font-size:1.1rem; font-weight:600;"><i class="fa-solid fa-heart-pulse" style="color:var(--success)"></i> People Service Integration</h2>
+            <p class="text-light text-small" style="margin-top:.25rem">Connect to the People Service so people supported can be searched and added to teams by name.</p>
+        </div>
+        <?php if ($peopleUrl && $peopleKeySet): ?>
+            <span class="badge badge-green">Connected</span>
+        <?php else: ?>
+            <span class="badge badge-grey">Not configured</span>
+        <?php endif; ?>
+    </div>
+    <form method="POST">
+        <?php echo CSRF::tokenField(); ?>
+        <input type="hidden" name="action" value="save_people_service">
+        <div class="form-group">
+            <label>People Service URL</label>
+            <input type="url" name="people_service_url" class="form-control" id="people_service_url"
+                   placeholder="https://your-people-service.hostingersite.com/public"
+                   value="<?php echo htmlspecialchars($peopleUrl); ?>">
+        </div>
+        <div class="form-group">
+            <label>API Key</label>
+            <input type="password" name="people_service_api_key" class="form-control" id="people_service_api_key"
+                   placeholder="<?php echo $peopleKeySet ? '(saved — leave blank to keep)' : 'Paste key from People Service → Admin → Settings → API Keys'; ?>">
+            <?php if ($peopleKeySet): ?><div class="form-hint">Leave blank to keep the existing key.</div><?php endif; ?>
+        </div>
+        <div style="display:flex; gap:.75rem; flex-wrap:wrap;">
+            <button type="submit" class="btn btn-primary"><i class="fa-solid fa-save"></i> Save</button>
+            <button type="submit" form="test-people-form" class="btn btn-secondary"><i class="fa-solid fa-plug"></i> Test</button>
+            <?php if ($peopleUrl || $peopleKeySet): ?>
+            <button type="submit" form="clear-people-form" class="btn btn-danger"
+                    onclick="return confirm('Disconnect the People Service?')">
+                <i class="fa-solid fa-unlink"></i> Disconnect
+            </button>
+            <?php endif; ?>
+        </div>
+    </form>
+    <form id="test-people-form" method="POST" style="display:none">
+        <?php echo CSRF::tokenField(); ?>
+        <input type="hidden" name="action" value="test_people_service">
+        <input type="hidden" name="people_service_url" id="test_people_url" value="<?php echo htmlspecialchars($peopleUrl); ?>">
+        <input type="hidden" name="people_service_api_key" id="test_people_key" value="">
+    </form>
+    <form id="clear-people-form" method="POST" style="display:none">
+        <?php echo CSRF::tokenField(); ?>
+        <input type="hidden" name="action" value="clear_people_service">
+    </form>
+</div>
+
+<script>
+document.querySelector('[form="test-staff-form"]')?.addEventListener('click', function() {
+    document.getElementById('test_staff_url').value  = document.getElementById('staff_service_url').value;
+    document.getElementById('test_staff_key').value  = document.getElementById('staff_service_api_key').value;
+});
+document.querySelector('[form="test-people-form"]')?.addEventListener('click', function() {
+    document.getElementById('test_people_url').value = document.getElementById('people_service_url').value;
+    document.getElementById('test_people_key').value = document.getElementById('people_service_api_key').value;
+});
+</script>
 
 <!-- ── Team Types ─────────────────────────────────────────────────────────── -->
 <div class="card">

@@ -2,29 +2,43 @@
 /**
  * People Service API Client (used by Team Service)
  *
- * Reads PEOPLE_SERVICE_URL and PEOPLE_SERVICE_API_KEY from .env / constants.
+ * Connection settings are read per-organisation from the organisation_settings
+ * table (configured via Admin → Settings → Integrations), falling back to
+ * .env constants PEOPLE_SERVICE_URL and PEOPLE_SERVICE_API_KEY.
  */
 class PeopleServiceClient
 {
-    public static function enabled(): bool
+    private static function baseUrl(int $orgId): string
     {
-        return PEOPLE_SERVICE_URL !== '' && PEOPLE_SERVICE_API_KEY !== '';
+        return rtrim(
+            OrgSettings::get($orgId, 'people_service_url', PEOPLE_SERVICE_URL),
+            '/'
+        );
+    }
+
+    private static function apiKey(int $orgId): string
+    {
+        return OrgSettings::get($orgId, 'people_service_api_key', PEOPLE_SERVICE_API_KEY);
+    }
+
+    public static function enabled(int $orgId): bool
+    {
+        return self::baseUrl($orgId) !== '' && self::apiKey($orgId) !== '';
     }
 
     /**
-     * Fetch all active people from the People Service.
-     * Returns a flat array of ['id', 'name', 'ref'] items ready for the search UI.
+     * Fetch all active people. Returns [['id', 'name', 'ref'], ...] or [].
+     * organisation_id is passed as a query param for app-scoped keys.
      */
-    public static function fetchAll(int $orgId = 0): array
+    public static function fetchAll(int $orgId): array
     {
-        if (!self::enabled()) return [];
+        if (!self::enabled($orgId)) return [];
 
-        $url = PEOPLE_SERVICE_URL . '/api/people-data.php?status=active'
-             . ($orgId ? '&organisation_id=' . $orgId : '');
+        $url = self::baseUrl($orgId) . '/api/people-data.php?status=active&organisation_id=' . $orgId;
         $ctx = stream_context_create([
             'http' => [
                 'method'        => 'GET',
-                'header'        => 'Authorization: Bearer ' . PEOPLE_SERVICE_API_KEY . "\r\n" .
+                'header'        => 'Authorization: Bearer ' . self::apiKey($orgId) . "\r\n" .
                                    'Accept: application/json' . "\r\n",
                 'timeout'       => 5,
                 'ignore_errors' => true,
@@ -42,5 +56,24 @@ class PeopleServiceClient
             'name' => trim(($p['first_name'] ?? '') . ' ' . ($p['last_name'] ?? '')),
             'ref'  => $p['preferred_name'] ?? '',
         ], $rows);
+    }
+
+    /**
+     * Test a connection with explicit URL + key (used by settings page).
+     */
+    public static function testConnection(string $url, string $apiKey): bool
+    {
+        $url = rtrim($url, '/') . '/api/people-data.php?organisation_id=0';
+        $ctx = stream_context_create([
+            'http' => [
+                'method'        => 'GET',
+                'header'        => 'Authorization: Bearer ' . $apiKey . "\r\nAccept: application/json\r\n",
+                'timeout'       => 5,
+                'ignore_errors' => true,
+            ],
+        ]);
+        // Any JSON response (even org-required error) means the service is reachable and key is valid
+        $body = @file_get_contents($url, false, $ctx);
+        return $body !== false && json_decode($body) !== null;
     }
 }

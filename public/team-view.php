@@ -70,7 +70,7 @@ $team       = Team::findById($teamId);
 $breadcrumb = Team::getAncestorPath($teamId);
 
 // Fetch member lists from connected services for the search UI
-$staffList  = StaffServiceClient::fetchAll();
+$staffList  = StaffServiceClient::fetchAll($organisationId);
 $peopleList = PeopleServiceClient::fetchAll($organisationId);
 $staffJson  = json_encode($staffList,  JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
 $peopleJson = json_encode($peopleList, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
