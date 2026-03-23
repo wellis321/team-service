@@ -15,11 +15,12 @@ class PeopleServiceClient
      * Fetch all active people from the People Service.
      * Returns a flat array of ['id', 'name', 'ref'] items ready for the search UI.
      */
-    public static function fetchAll(): array
+    public static function fetchAll(int $orgId = 0): array
     {
         if (!self::enabled()) return [];
 
-        $url = PEOPLE_SERVICE_URL . '/api/people-data.php?status=active';
+        $url = PEOPLE_SERVICE_URL . '/api/people-data.php?status=active'
+             . ($orgId ? '&organisation_id=' . $orgId : '');
         $ctx = stream_context_create([
             'http' => [
                 'method'        => 'GET',
